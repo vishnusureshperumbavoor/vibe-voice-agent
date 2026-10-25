@@ -17,6 +17,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'orb' | 'feed'>('orb');
   const [isConnectingColab, setIsConnectingColab] = useState(false);
   const [isProbingGpu, setIsProbingGpu] = useState(false);
+  const [isDisconnectingColab, setIsDisconnectingColab] = useState(false);
 
   const [settings, setSettings] = useState<VoiceSettings>({
     emotion: 'natural',
@@ -102,6 +103,20 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleDisconnectColab = async () => {
+    setIsDisconnectingColab(true);
+    try {
+      const res = await fetch('/api/colab/disconnect', { method: 'POST' });
+      const data = await res.json();
+      console.log('Disconnect Colab response:', data);
+      if (data) setColabStatus(data);
+    } catch (err) {
+      console.error('Failed to disconnect Colab:', err);
+    } finally {
+      setIsDisconnectingColab(false);
+    }
+  };
+
   const handleSaveSettings = (newSettings: VoiceSettings) => {
     setSettings(newSettings);
     updateSettings(newSettings);
@@ -139,8 +154,10 @@ export const App: React.FC = () => {
           status={colabStatus}
           onConnectClick={handleConnectColab}
           onProbeClick={handleProbeGpu}
+          onDisconnectClick={handleDisconnectColab}
           isConnecting={isConnectingColab}
           isProbing={isProbingGpu}
+          isDisconnecting={isDisconnectingColab}
         />
       </header>
 

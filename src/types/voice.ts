@@ -2,13 +2,14 @@ export type AgentState = 'disconnected' | 'idle' | 'listening' | 'thinking' | 's
 
 export interface ColabStatus {
   connected: boolean;
-  status: 'not_connected' | 'pairing' | 'connected' | 'error';
+  status: 'not_connected' | 'pairing' | 'connected' | 'disconnected' | 'error';
   message: string;
   gpu?: string;
   vramTotal?: string;
   vramUsed?: string;
   modelReady: boolean;
   latencyMs?: number;
+  verifiedAt?: string;
 }
 
 export interface ChatMessage {

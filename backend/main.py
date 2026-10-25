@@ -69,6 +69,17 @@ async def probe_colab_gpu():
     return status
 
 
+@app.post("/api/colab/disconnect")
+async def disconnect_colab():
+    status = await bridge.disconnect()
+    for ws in active_connections:
+        try:
+            await ws.send_json({"type": "colab_status", "payload": status})
+        except Exception:
+            pass
+    return status
+
+
 @app.post("/api/settings")
 async def update_settings(settings: VoiceSettingsModel):
     global current_settings
