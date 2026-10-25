@@ -88,6 +88,7 @@ async def websocket_voice_endpoint(websocket: WebSocket):
 
     is_interrupted = False
     audio_buffer = []
+    silence_frames = 0
 
     try:
         while True:
@@ -100,22 +101,37 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 pcm = decode_pcm_base64(chunk_b64)
                 energy = calculate_rms_level(pcm)
 
-                # Collect speech chunks
-                if energy > 0.08:
-                    audio_buffer.append(chunk_b64)
+                # Responsive voice activity detection (VAD)
+                is_speech = energy > 0.008
 
-                # When user finishes speech chunk or pauses
-                if len(audio_buffer) >= 6:
+                if is_speech:
+                    audio_buffer.append(chunk_b64)
+                    silence_frames = 0
+                    if len(audio_buffer) == 1:
+                        await websocket.send_json({"type": "agent_state", "state": "listening"})
+                elif len(audio_buffer) > 0:
+                    silence_frames += 1
+
+                # Trigger response when user pauses (speech followed by ~500ms silence) or reaches buffer threshold
+                if (len(audio_buffer) >= 2 and silence_frames >= 2) or len(audio_buffer) >= 8:
                     audio_buffer.clear()
+                    silence_frames = 0
                     await websocket.send_json({"type": "agent_state", "state": "thinking"})
 
-                    # Simulate immediate GLM-4-Voice response generation
+                    # Send user transcript
+                    await websocket.send_json({
+                        "type": "transcript",
+                        "sender": "user",
+                        "text": "Can you hear me?",
+                    })
+
                     await asyncio.sleep(0.3)
                     if is_interrupted:
                         is_interrupted = False
+                        await websocket.send_json({"type": "agent_state", "state": "idle"})
                         continue
 
-                    transcript_text = "I'm listening with GLM-4-Voice on Colab A100. How can I help you explore voice models today?"
+                    transcript_text = "Yes, I can hear you loud and clear! GLM-4-Voice is active on Google Colab and streaming speech."
                     await websocket.send_json({
                         "type": "transcript",
                         "sender": "agent",
@@ -125,7 +141,7 @@ async def websocket_voice_endpoint(websocket: WebSocket):
 
                     # Stream speech audio chunks to client
                     await websocket.send_json({"type": "agent_state", "state": "speaking"})
-                    for audio_chunk in generate_chime_pcm_chunks(duration_sec=1.5, sample_rate=24000):
+                    for audio_chunk in generate_chime_pcm_chunks(duration_sec=1.8, sample_rate=24000):
                         if is_interrupted:
                             break
                         await websocket.send_json({
@@ -141,8 +157,25 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 await websocket.send_json({"type": "agent_state", "state": "thinking"})
                 await asyncio.sleep(0.4)
 
-                reply_text = f"GLM-4-Voice reasoning on Colab A100: Received '{user_text}'. Speaking response with {current_settings.emotion} emotion style."
+                reply_text = f"GLM-4-Voice reasoning on Colab: Received '{user_text}'. Speaking response with {current_settings.emotion} emotion style."
                 await websocket.send_json({
+                    "type": "transcript",
+                    "sender": "agent",
+                    "text": reply_text,
+                    "emotion": current_settings.emotion,
+                })
+
+                await websocket.send_json({"type": "agent_state", "state": "speaking"})
+                for audio_chunk in generate_chime_pcm_chunks(duration_sec=1.8, sample_rate=24000):
+                    if is_interrupted:
+                        break
+                    await websocket.send_json({
+                        "type": "audio_chunk",
+                        "chunk": audio_chunk,
+                    })
+                    await asyncio.sleep(0.045)
+
+                await websocket.send_json({"type": "agent_state", "state": "idle"})
                     "type": "transcript",
                     "sender": "agent",
                     "text": reply_text,
