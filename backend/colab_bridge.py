@@ -1,5 +1,6 @@
 """
-Bridge between vibe-voice-agent FastAPI and Google Colab MCP via vspagent.
+Real Google Colab MCP Bridge via vspagent for vibe-voice-agent.
+No faking: accurately probes live GPU hardware and connection states.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ import os
 import sys
 from typing import Any, Dict, Optional
 
-# Add vspagent to python path
+# Add local vspagent directory to python path
 VSPAGENT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "vspagent"))
 if VSPAGENT_ROOT not in sys.path:
     sys.path.insert(0, VSPAGENT_ROOT)
@@ -17,66 +18,99 @@ if VSPAGENT_ROOT not in sys.path:
 try:
     from vspagent.colab.client import ColabMCPClient
 except ImportError:
-    ColabMCPClient = None  # Fallback for standalone dev
+    ColabMCPClient = None
 
 
 class ColabVoiceBridge:
     def __init__(self):
         self.client: Optional[ColabMCPClient] = None
+        self.status: str = "not_connected"  # not_connected, pairing, connected, error
+        self.status_message: str = "Not connected. Click 'Connect Colab' to pair with browser tab."
+        self.gpu_info: Optional[str] = None
         self.colab_endpoint: Optional[str] = None
-        self.gpu_name: Optional[str] = None
-        self.vram_info: Optional[str] = None
-        self.is_connected: bool = False
-        self.status_message: str = "Ready to connect to Google Colab"
 
     def get_status(self) -> Dict[str, Any]:
-        if self.client and hasattr(self.client, "status"):
-            status_str = self.client.status
-            connected = status_str == "connected" or self.is_connected
-        else:
-            status_str = "connected" if self.is_connected else "not_connected"
-            connected = self.is_connected
+        """Returns the truthful, live connection status."""
+        if self.client:
+            # Sync live state from vspagent client
+            self.status = getattr(self.client, "status", self.status)
+            self.status_message = getattr(self.client, "status_message", self.status_message)
+            self.gpu_info = getattr(self.client, "gpu_info", self.gpu_info)
+
+        is_connected = self.status == "connected"
 
         return {
-            "connected": connected,
-            "status": status_str,
+            "connected": is_connected,
+            "status": self.status,
             "message": self.status_message,
-            "gpu": self.gpu_name or "NVIDIA A100-SXM4-40GB (Colab Pro)",
-            "vramTotal": self.vram_info or "40.0 GB",
-            "modelReady": connected,
+            "gpu": self.gpu_info or "Runtime paired (Select A100 in Colab)",
+            "vramTotal": self.gpu_info.split("(")[-1].replace(")", "") if (self.gpu_info and "(" in self.gpu_info) else "",
+            "modelReady": is_connected and bool(self.colab_endpoint),
             "endpoint": self.colab_endpoint,
         }
 
     async def connect_and_launch(self) -> Dict[str, Any]:
-        """Pairs with Colab MCP, checks GPU, and deploys GLM-4-Voice cells."""
-        self.status_message = "Pairing with Google Colab MCP..."
+        """Connects via real vspagent ColabMCP client without premature code execution."""
+        if ColabMCPClient is None:
+            self.status = "error"
+            self.status_message = "vspagent library not found on system path."
+            return self.get_status()
 
-        if ColabMCPClient is not None:
-            try:
-                if self.client is None:
-                    self.client = ColabMCPClient()
+        try:
+            if self.client is None:
+                self.client = ColabMCPClient()
 
-                # Run pairing coroutine
-                if hasattr(self.client, "connect"):
-                    await self.client.connect()
-                
-                self.is_connected = True
-                self.gpu_name = "NVIDIA A100-SXM4-40GB"
-                self.vram_info = "40.0 GB (High-Bandwidth)"
-                self.status_message = "GLM-4-Voice active on Colab A100"
-            except Exception as e:
-                self.status_message = f"Colab MCP connection notice: {str(e)}"
-                # Fallback to local dev mock if Colab browser isn't paired yet
-                self.is_connected = True
-                self.gpu_name = "NVIDIA A100 (Colab Pro via vspagent)"
-                self.vram_info = "40.0 GB"
-        else:
-            self.is_connected = True
-            self.gpu_name = "NVIDIA A100 (Dev Mode)"
-            self.vram_info = "40.0 GB"
-            self.status_message = "Connected to Colab Bridge (Dev Mode)"
+            self.status = "pairing"
+            self.status_message = "Starting Colab MCP and waiting for browser tab authorization..."
+
+            # 1. Start the MCP server process
+            await self.client.start()
+
+            # 2. Trigger browser tab connection
+            res = await self.client.connect_browser()
+            print("[ColabBridge] connect_browser result:", res)
+
+            # Wait briefly for pairing handshake
+            for _ in range(5):
+                if self.client.status == "connected":
+                    self.status = "connected"
+                    self.status_message = (
+                        "Connected to Colab tab! Switch runtime to A100 GPU in Colab (Runtime -> Change runtime type), "
+                        "then click 'Verify A100 GPU'."
+                    )
+                    break
+                await asyncio.sleep(0.5)
+
+            return self.get_status()
+
+        except Exception as e:
+            self.status = "error"
+            self.status_message = f"Colab pairing failed: {str(e)}"
+            print(f"[ColabBridge Error] {e}")
+            return self.get_status()
+
+    async def probe_gpu(self, force: bool = True) -> Dict[str, Any]:
+        """Probes live GPU hardware on the active Colab runtime on-demand."""
+        if not self.client or not self.client.is_connected:
+            return self.get_status()
+
+        try:
+            self.status_message = "Probing Colab hardware..."
+            info = await self.client.probe_gpu_info(force=force)
+            if info:
+                self.gpu_info = info
+                self.status = "connected"
+                self.status_message = f"Connected: {info}"
+        except Exception as e:
+            print(f"[ColabBridge Probe Error] {e}")
 
         return self.get_status()
+
+    async def execute_remote_code(self, code: str) -> Dict[str, Any]:
+        """Executes Python code on the connected Colab GPU runtime."""
+        if not self.client or self.status != "connected":
+            return {"success": False, "error": "Colab runtime is not connected."}
+        return await self.client.execute_code(code)
 
 
 bridge = ColabVoiceBridge()

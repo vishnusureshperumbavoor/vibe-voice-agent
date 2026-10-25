@@ -16,6 +16,7 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'orb' | 'feed'>('orb');
   const [isConnectingColab, setIsConnectingColab] = useState(false);
+  const [isProbingGpu, setIsProbingGpu] = useState(false);
 
   const [settings, setSettings] = useState<VoiceSettings>({
     emotion: 'natural',
@@ -85,6 +86,19 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleProbeGpu = async () => {
+    setIsProbingGpu(true);
+    try {
+      const res = await fetch('/api/colab/probe-gpu', { method: 'POST' });
+      const data = await res.json();
+      console.log('Probe GPU response:', data);
+    } catch (err) {
+      console.error('Failed to probe Colab GPU:', err);
+    } finally {
+      setIsProbingGpu(false);
+    }
+  };
+
   const handleSaveSettings = (newSettings: VoiceSettings) => {
     setSettings(newSettings);
     updateSettings(newSettings);
@@ -121,7 +135,9 @@ export const App: React.FC = () => {
         <ColabStatusBadge
           status={colabStatus}
           onConnectClick={handleConnectColab}
+          onProbeClick={handleProbeGpu}
           isConnecting={isConnectingColab}
+          isProbing={isProbingGpu}
         />
       </header>
 
