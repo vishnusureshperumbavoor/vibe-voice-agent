@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -e
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$DIR"
+
+echo "=== Starting Vibe Voice Agent React Frontend (Port 5173) ==="
+npm run dev -- --host
