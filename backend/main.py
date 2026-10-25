@@ -176,23 +176,6 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                     await asyncio.sleep(0.045)
 
                 await websocket.send_json({"type": "agent_state", "state": "idle"})
-                    "type": "transcript",
-                    "sender": "agent",
-                    "text": reply_text,
-                    "emotion": current_settings.emotion,
-                })
-
-                await websocket.send_json({"type": "agent_state", "state": "speaking"})
-                for audio_chunk in generate_chime_pcm_chunks(duration_sec=1.8, sample_rate=24000):
-                    if is_interrupted:
-                        break
-                    await websocket.send_json({
-                        "type": "audio_chunk",
-                        "chunk": audio_chunk,
-                    })
-                    await asyncio.sleep(0.045)
-
-                await websocket.send_json({"type": "agent_state", "state": "idle"})
 
             elif msg_type == "interrupt":
                 is_interrupted = True

@@ -3,6 +3,7 @@ import { useState, useRef, useCallback } from 'react';
 export function useAudioPlayer() {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const compressorRef = useRef<DynamicsCompressorNode | null>(null);
   const nextPlayTimeRef = useRef<number>(0);
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const [playerLevel, setPlayerLevel] = useState(0);
@@ -10,8 +11,24 @@ export function useAudioPlayer() {
   const initContext = useCallback(() => {
     if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      audioContextRef.current = new AudioCtx({ sampleRate: 24000 });
-      nextPlayTimeRef.current = audioContextRef.current.currentTime;
+      const ctx = new AudioCtx({ sampleRate: 24000 });
+      audioContextRef.current = ctx;
+      nextPlayTimeRef.current = ctx.currentTime;
+
+      // Master anti-distortion compressor/limiter to prevent harsh clipping
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.setValueAtTime(-12, ctx.currentTime);
+      comp.knee.setValueAtTime(8, ctx.currentTime);
+      comp.ratio.setValueAtTime(4, ctx.currentTime);
+      comp.attack.setValueAtTime(0.003, ctx.currentTime);
+      comp.release.setValueAtTime(0.08, ctx.currentTime);
+
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.75, ctx.currentTime); // Safe digital headroom
+
+      comp.connect(masterGain);
+      masterGain.connect(ctx.destination);
+      compressorRef.current = comp;
     }
     if (audioContextRef.current.state === 'suspended') {
       audioContextRef.current.resume();
@@ -41,6 +58,14 @@ export function useAudioPlayer() {
         sumSq += floatVal * floatVal;
       }
 
+      // Micro cross-fade smoothing (eliminates clicks/pops at buffer boundaries)
+      const taperLen = Math.min(24, Math.floor(channelData.length / 4));
+      for (let i = 0; i < taperLen; i++) {
+        const factor = i / taperLen;
+        channelData[i] *= factor;
+        channelData[channelData.length - 1 - i] *= factor;
+      }
+
       // Calculate approximate RMS level for visualizer
       const rms = Math.sqrt(sumSq / int16Array.length);
       setPlayerLevel(Math.min(1, rms * 3.5));
@@ -48,11 +73,15 @@ export function useAudioPlayer() {
       // Schedule seamless audio playback
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(ctx.destination);
+      if (compressorRef.current) {
+        source.connect(compressorRef.current);
+      } else {
+        source.connect(ctx.destination);
+      }
 
       const currentTime = ctx.currentTime;
       if (nextPlayTimeRef.current < currentTime) {
-        nextPlayTimeRef.current = currentTime + 0.05; // tiny buffer headroom
+        nextPlayTimeRef.current = currentTime + 0.04; // tiny buffer headroom
       }
 
       source.start(nextPlayTimeRef.current);

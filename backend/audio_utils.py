@@ -36,12 +36,12 @@ def generate_chime_pcm_chunks(duration_sec: float = 1.2, sample_rate: int = 2400
     total_samples = int(duration_sec * sample_rate)
     t = np.linspace(0, duration_sec, total_samples, endpoint=False)
     
-    # Dual harmonic pleasant chime (440Hz A4 + 660Hz E5) with decaying envelope
-    envelope = np.exp(-t * 2.8)
-    waveform = (0.5 * np.sin(2 * np.pi * 440 * t) + 0.3 * np.sin(2 * np.pi * 659.25 * t)) * envelope
+    # Smooth warm chime with gentle decay (warm E4 + A4 harmonics)
+    envelope = np.exp(-t * 2.2)
+    waveform = (0.35 * np.sin(2 * np.pi * 329.63 * t) + 0.25 * np.sin(2 * np.pi * 440.0 * t)) * envelope
     
-    # Convert to int16
-    pcm_int16 = (waveform * 32767).astype(np.int16)
+    # Safe digital headroom (peaks under 65% full-scale to prevent hardware distortion)
+    pcm_int16 = (waveform * 20000).astype(np.int16)
     
     # Split into 50ms chunks (1200 samples per chunk at 24kHz)
     chunk_size = 1200

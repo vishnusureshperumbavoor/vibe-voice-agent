@@ -21,7 +21,7 @@ export function useAudioRecorder({ onAudioChunk, onAudioLevel }: AudioRecorderOp
           sampleRate: 16000,
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: false, // Disabled to eliminate aggressive gain pumping and scratchy distortion
         },
       });
 
