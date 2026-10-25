@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=========================================================="
 echo "        🎙️  Launching Vibe Voice Agent Pipeline"
@@ -16,13 +16,13 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Start Backend
-"$DIR/scripts/start_backend.sh" &
+"$DIR/backend_start" &
 BACKEND_PID=$!
 
 sleep 1
 
 # Start Frontend
-"$DIR/scripts/start_frontend.sh" &
+"$DIR/frontend_start" &
 FRONTEND_PID=$!
 
 wait

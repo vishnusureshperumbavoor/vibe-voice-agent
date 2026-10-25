@@ -48,19 +48,19 @@ Full-Duplex Speech-to-Speech Conversational Voice UI & Agent Pipeline powered by
 
 ### 1. Start Both Frontend & Backend (One Command)
 ```bash
-./scripts/start_all.sh
+./all_start
 ```
 
 ### Or Start Individually:
 * **Backend (FastAPI)**:
   ```bash
-  ./scripts/start_backend.sh
+  ./backend_start
   ```
   Runs at: `http://localhost:8000`
 
 * **Frontend (React + Vite)**:
   ```bash
-  ./scripts/start_frontend.sh
+  ./frontend_start
   ```
   Runs at: `http://localhost:5173`
 
