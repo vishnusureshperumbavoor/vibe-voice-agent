@@ -137,6 +137,12 @@ export function useVoiceSocket({ onAudioChunkReceived, onInterrupted }: VoiceSoc
 
   useEffect(() => {
     connect();
+    // Fetch initial Colab status on mount
+    fetch('/api/colab/status')
+      .then((res) => res.json())
+      .then((data) => setColabStatus(data))
+      .catch((err) => console.warn('Could not fetch initial Colab status:', err));
+
     return () => {
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       if (wsRef.current) wsRef.current.close();
@@ -147,6 +153,7 @@ export function useVoiceSocket({ onAudioChunkReceived, onInterrupted }: VoiceSoc
     agentState,
     setAgentState,
     colabStatus,
+    setColabStatus,
     messages,
     sendAudioChunk,
     sendTextPrompt,

@@ -43,10 +43,11 @@ class ColabVoiceBridge:
             "connected": is_connected,
             "status": self.status,
             "message": self.status_message,
-            "gpu": self.gpu_info or "Runtime paired (Select A100 in Colab)",
+            "gpu": self.gpu_info or ("Runtime paired (Select A100 in Colab)" if is_connected else "Not Connected"),
             "vramTotal": self.gpu_info.split("(")[-1].replace(")", "") if (self.gpu_info and "(" in self.gpu_info) else "",
             "modelReady": is_connected and bool(self.colab_endpoint),
             "endpoint": self.colab_endpoint,
+            "recent_logs": list(getattr(self.client, "logs", []))[-20:],
         }
 
     async def connect_and_launch(self) -> Dict[str, Any]:

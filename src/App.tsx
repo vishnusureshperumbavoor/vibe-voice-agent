@@ -40,6 +40,7 @@ export const App: React.FC = () => {
     agentState,
     setAgentState,
     colabStatus,
+    setColabStatus,
     messages,
     sendAudioChunk,
     sendTextPrompt,
@@ -79,6 +80,7 @@ export const App: React.FC = () => {
       const res = await fetch('/api/colab/connect', { method: 'POST' });
       const data = await res.json();
       console.log('Connect Colab response:', data);
+      if (data) setColabStatus(data);
     } catch (err) {
       console.error('Failed to connect to Colab:', err);
     } finally {
@@ -92,6 +94,7 @@ export const App: React.FC = () => {
       const res = await fetch('/api/colab/probe-gpu', { method: 'POST' });
       const data = await res.json();
       console.log('Probe GPU response:', data);
+      if (data) setColabStatus(data);
     } catch (err) {
       console.error('Failed to probe Colab GPU:', err);
     } finally {
